@@ -1,5 +1,6 @@
 -- TODO: haskell version: what are tags? what can happen?
 -- TODO: why is tag-free desirable?
+-- TODO: basic dependent function type syntax (with implicit arguments)
 module FunFr-20140627 where
 
 open import Data.Nat
