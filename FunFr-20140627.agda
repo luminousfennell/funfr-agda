@@ -18,9 +18,10 @@ module STLC where
   -- Similar to Haskell's GADT syntax
   --   Set is like Kind *
   
-  -- We want to check:
-  --   1) are all additions on numbers  
-  --   2) are all functions calls on functions with correctly typed arguments
+  -- Exp:
+  -- We want a datatype where
+  --   1) are all additions are on numbers  
+  --   2) are all functions calls are on functions with correctly typed arguments
   --   3) are all used variables in scope
   
   -- let's tackle 1) and 2) first
