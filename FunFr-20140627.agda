@@ -300,63 +300,84 @@ module Infer where
   ... | just p1 | just p2 rewrite p1 | p2 = just refl
   ... | _       | _       = nothing
   
-  lookupTy : Nat -> (G : Ctx) -> Maybe (Sig Ty (\ t -> Bound t G)) 
+
+  data TypedIx (G : Ctx) : Set where
+    ix : {t : Ty} -> Bound t G -> TypedIx G
+  
+  lookupTy : Nat -> (G : Ctx) -> Maybe (TypedIx G)
   lookupTy n nil = nothing
-  lookupTy zero (t :: G) = just (t , zero)
+  lookupTy zero (t :: G) = just (ix zero)
   lookupTy (suc n) (_ :: G) with lookupTy n G
-  ... | just (t , x) = just (t , suc x)
+  ... | just (ix x) = just (ix (suc x))
   ... | nothing = nothing
   
     
+  data TypedResult (G : Ctx) : Set where
+    result : {t : Ty} -> STLC.Exp G t -> TypedResult G
   
-  typeof : (G : Ctx) → LC.Exp → Maybe (Sig Ty (\ t -> STLC.Try3.Exp G t))
+  typeof : (G : Ctx) → LC.Exp → Maybe (TypedResult G)
   typeof G (Var x) with lookupTy x G
-  ... | just (t , x') = just (t , Var x')
+  ... | just (ix x') = just (result (Var x'))
   ... | nothing = nothing
-  typeof G (C x) = just (N , C x)
+  typeof G (C x) = just (result (C x))
   typeof G (Add e1 e2) with typeof G e1 | typeof G e2
-  ... | just (N , e1') | just (N , e2') = just (N , Add e1' e2')
+  ... | just (result {N} e1') | just (result {N} e2') = just (result (Add e1' e2'))
   ... | _ | _ = nothing
   typeof G (Lam t1 e) with typeof (t1 :: G) e
-  typeof G (Lam t1 e) | just (t2 , e') = just (Fun t1 t2 , Lam t1 e')
+  typeof G (Lam t1 e) | just (result {t2} e') = just (result (Lam t1 e'))
   typeof G (Lam t1 e) | _ = nothing
   typeof G (App e1 e2) with typeof G e1 | typeof G e2
-  typeof G (App e1 e2) | just (Fun t1 t2 , f)   | just (t1' , e) with t1 == t1'
-  typeof G (App e1 e2) | just (Fun .t1' t2 , f) | just (t1' , e) | just refl = just (t2 , App f e)
-  typeof G (App e1 e2) | just (Fun t1 t2 , f)   | just (t1' , e) | nothing = nothing
+  typeof G (App e1 e2) | just (result {Fun t1 t2} f)   | just (result {t1'} e) with t1 == t1'
+  typeof G (App e1 e2) | just (result {Fun t1 t2} f)   | just (result {.t1} e) | just refl = just (result (App f e))
+  typeof G (App e1 e2) | just (result {Fun t1 t2} f)   | just (result {t1'} e) | nothing = nothing
   typeof G (App e1 e2) | _ | _ = nothing
        
-  test-typeof-fortytwo :  typeof nil LC.fortytwo === just (N , App
+  test-typeof-fortytwo :  typeof nil LC.fortytwo === just (result (App
                                                                  (App (Lam N (Lam N (Var (suc zero))))
                                                                   (C 42))
-                                                                 (C 5))
+                                                                 (C 5)))
   test-typeof-fortytwo = refl
   
-  eval' : (Sig Ty (\ t -> STLC.Try3.Exp nil t)) -> Sig Ty (\ t -> Value t)
-  eval' ( t , e ) = t , eval e nil
+  data TypedValue : Set where
+    val : {t : Ty} -> Value t -> TypedValue
+  
+  eval' : TypedResult nil -> TypedValue 
+  eval' (result e) = val (eval e nil)
 
-  test-eval-fortytwo : fmap eval' (typeof nil LC.fortytwo)  === just (N , 42)
+  test-eval-fortytwo : fmap eval' (typeof nil LC.fortytwo)  === just (val 42)
   test-eval-fortytwo = refl
 
+module Typeof-Precise where
+  open Types
+  open STLC hiding (lookupTy)
+  open LC
+  open Infer using (_==_)
+
+  --! we want to know that the indices are the basically the same
   bound-to-nat : {G : Ctx} {t : Ty} -> Bound t G -> Nat
   bound-to-nat zero = 0
   bound-to-nat (suc x) = suc (bound-to-nat x)
   
+  -- ! and that the expressions are basically the same
+  strip : {t : Ty} {G : Ctx} (e : STLC.Exp G t) -> LC.Exp
+  strip (C x) = C x
+  strip (Add e1 e2) = Add (strip e1) (strip e2)
+  strip (Lam t1 e) = Lam t1 (strip e)
+  strip (App f e) = App (strip f) (strip e)
+  strip (Var x) = Var (bound-to-nat x)
 
-  data Bound' : Nat -> Ty -> Ctx -> Set where
-      zero : {G : Ctx} {t : Ty} -> Bound' zero t ( t :: G)
-      suc  : {n : Nat} {t t' : Ty} {G : Ctx} -> Bound' n t G -> Bound' (suc n) t (t' :: G)
-      
-  toBound : {n : Nat} {t : Ty} {G : Ctx} -> Bound' n t G -> Bound t G
+  
+  -- ! It is easier to state that as relations
+  data BoundedIx : Nat -> Ty -> Ctx -> Set where
+      zero : {G : Ctx} {t : Ty} -> BoundedIx zero t ( t :: G)
+      suc  : {n : Nat} {t t' : Ty} {G : Ctx} -> BoundedIx n t G -> BoundedIx (suc n) t (t' :: G)
+
+  toBound : {n : Nat} {t : Ty} {G : Ctx} -> BoundedIx n t G -> Bound t G
   toBound zero = zero
   toBound (suc x) = suc (toBound x)
-  
-  lem-bound : {n : Nat} {t : Ty} {G : Ctx} -> (x : Bound' n t G) -> n === bound-to-nat (toBound x)
-  lem-bound zero = refl
-  lem-bound (suc x) = cong suc (lem-bound x)
-
+      
   data Annotated {G : Ctx} : {t : Ty} -> LC.Exp -> STLC.Try3.Exp G t -> Set where
-    Var : {t : Ty} {n : Nat} (x : Bound' n t G) -> Annotated (Var n) (Var (toBound x))
+    Var : {t : Ty} {n : Nat} (x : BoundedIx n t G) -> Annotated (Var n) (Var (toBound x))
     C : {n : Nat} -> Annotated (C n) (C n)
     Add : {e1 e2 : LC.Exp} {e1' e2' : STLC.Exp G N} ->
           Annotated e1 e1' -> Annotated e2 e2' -> Annotated (Add e1 e2) (Add e1' e2')
@@ -364,13 +385,12 @@ module Infer where
           Annotated e e' -> Annotated (Lam t1 e) (Lam t1 e')
     App : {t1 t2 : Ty} {f e : LC.Exp} {f' : STLC.Exp G (Fun t1 t2)} {e' : STLC.Exp G t1} ->
           Annotated f f' -> Annotated e e' -> Annotated (App f e) (App f' e')
-          
-  strip : {t : Ty} {G : Ctx} (e : STLC.Exp G t) -> LC.Exp
-  strip (C x) = C x
-  strip (Add e1 e2) = Add (strip e1) (strip e2)
-  strip (Lam t1 e) = Lam t1 (strip e)
-  strip (App f e) = App (strip f) (strip e)
-  strip (Var x) = Var (bound-to-nat x)
+
+  
+  -- the relation is correct wrt to the functions 
+  lem-bound : {n : Nat} {t : Ty} {G : Ctx} -> (x : BoundedIx n t G) -> n === bound-to-nat (toBound x)
+  lem-bound zero = refl
+  lem-bound (suc x) = cong suc (lem-bound x)
           
   lem-annotated : {t : Ty} {G : Ctx} {e : LC.Exp} {e' : STLC.Exp G t} ->
                   Annotated e e' -> e === strip e'
@@ -380,29 +400,33 @@ module Infer where
   lem-annotated (Lam t1 e) rewrite lem-annotated e = refl
   lem-annotated (App e e') rewrite lem-annotated e | lem-annotated e' = refl
   
+  data TypedIx (G : Ctx) (n : Nat) : Set where
+    ix : {t : Ty}  -> BoundedIx n t G -> TypedIx G n
   
-  lookupTy-precise : (n : Nat) -> (G : Ctx) -> Maybe (Sig Ty (\ t -> (Bound' n t G))) 
+  lookupTy-precise : (n : Nat) -> (G : Ctx) -> Maybe (TypedIx G n)
   lookupTy-precise n nil = nothing
-  lookupTy-precise zero (t :: G) = just (t , zero)
+  lookupTy-precise zero (t :: G) = just (ix zero)
   lookupTy-precise (suc n) (_ :: G) with lookupTy-precise n G
-  ... | just (t , x) = just (t , suc x)
+  ... | just (ix x) = just (ix (suc x))
   ... | nothing = nothing
 
-  -- there is a typed STCL Expression; better (TODO) such that the erasure is equal to the untyped one
-  typeof-precise : (G : Ctx) → (e : LC.Exp) → Maybe (Sig Ty (\ t -> Sig (STLC.Exp G t) ( \ e' -> Annotated e e')))
+  data TypedResult (G : Ctx) (e : LC.Exp) : Set where
+    result : {t : Ty} {e' : STLC.Exp G t} -> Annotated e e' -> TypedResult G e
+
+  typeof-precise : (G : Ctx) → (e : LC.Exp) → Maybe (TypedResult G e)
   typeof-precise G (Var x) with lookupTy-precise x G
-  ... | just (t , x') = just (t , Var (toBound x') , Var x')
+  ... | just (ix  x') = just (result (Var x'))
   ... | nothing = nothing
-  typeof-precise G (C x) = just (N , C x , C)
+  typeof-precise G (C x) = just (result C)
   typeof-precise G (Add e1 e2) with typeof-precise G e1 | typeof-precise G e2
-  ... | just (N , e1'' , e1') | just (N , e2'' , e2') = just (N , Add e1'' e2'' , Add e1' e2')
+  ... | just (result {t = N} e1') | just  (result {t = N} e2') = just (result (Add e1' e2'))
   ... | _ | _ = nothing
   typeof-precise G (Lam t1 e) with typeof-precise (t1 :: G) e
-  typeof-precise G (Lam t1 e) | just (t2 , e'' , e') = just (Fun t1 t2 , Lam t1 e'' , Lam t1 e')
+  typeof-precise G (Lam t1 e) | just (result {t = t2} e') = just (result (Lam t1 e'))
   typeof-precise G (Lam t1 e) | _ = nothing
   typeof-precise G (App e1 e2) with typeof-precise G e1 | typeof-precise G e2
-  typeof-precise G (App e1 e2) | just (Fun t1 t2 , f)   | just (t1' , e) with t1 == t1'
-  typeof-precise G (App e1 e2) | just (Fun .t1' t2 , f' , f) | just (t1' , e' , e) | just refl = just (t2 , App f' e' , App f e)
-  typeof-precise G (App e1 e2) | just (Fun t1 t2 , f)   | just (t1' , e) | nothing = nothing
+  typeof-precise G (App e1 e2) | just (result {t = Fun t1 t2} f)   | just (result {t = t1'} e) with t1 == t1'
+  typeof-precise G (App e1 e2) | just (result {t = Fun t1 t2} f) | just (result {t = .t1}  e) | just refl = just (result (App f e))
+  typeof-precise G (App e1 e2) | just (result {t = Fun t1 t2} f)   | just (result {t = t1'} e)| nothing = nothing
   typeof-precise G (App e1 e2) | _ | _ = nothing
     

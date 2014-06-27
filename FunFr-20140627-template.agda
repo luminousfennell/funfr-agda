@@ -216,3 +216,41 @@ module STLC where
     test = {! eval fortytwo nil!}
 
   open Try3 public
+
+module Typeof where
+  open Types
+  open STLC hiding (lookupTy)
+  open LC
+
+
+  _==_ : (t1 t2 : Ty) → Maybe (t1 ≡ t2)
+  t1 == t2 = {!!}
+  
+
+  data TypedIx (G : Ctx) : Set where
+    ix : {t : Ty} -> Bound t G -> TypedIx G
+  
+  lookupTy : Nat -> (G : Ctx) -> Maybe (TypedIx G)
+  lookupTy n G = {!!}
+  
+    
+  data TypedResult (G : Ctx) : Set where
+    result : {t : Ty} -> STLC.Exp G t -> TypedResult G
+  
+  typeof : (G : Ctx) → LC.Exp → Maybe (TypedResult G)
+  typeof G e  = {!!}
+       
+  test-typeof-fortytwo :  typeof nil LC.fortytwo === just (result (App
+                                                                 (App (Lam N (Lam N (Var (suc zero))))
+                                                                  (C 42))
+                                                                 (C 5)))
+  test-typeof-fortytwo = refl
+  
+  data TypedValue : Set where
+    val : {t : Ty} -> Value t -> TypedValue
+  
+  eval' : TypedResult nil -> TypedValue 
+  eval' (result e) = val (eval e nil)
+
+  test-eval-fortytwo : fmap eval' (typeof nil LC.fortytwo)  === just (val 42)
+  test-eval-fortytwo = refl
