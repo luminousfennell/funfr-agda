@@ -1,6 +1,3 @@
--- TODO: haskell version: what are tags? what can happen?
--- TODO: why is tag-free desirable?
--- TODO: basic dependent function type syntax (with implicit arguments)
 -- TODO: link http://gergo.erdi.hu/blog/2013-05-01-simply_typed_lambda_calculus_in_agda,_without_shortcuts/
 module FunFr-20140627 where
 
@@ -9,17 +6,35 @@ open import Prelude
 
 module Types where
   -- (object-level) Types
+  -- Similar to Haskell's GADT syntax
+  --   Set is like Kind *
   data Ty : Set where 
     N : Ty
     Fun : Ty → Ty → Ty
 
+module LC where
+  open Types
+
+  data Exp : Set where
+    C : Nat → Exp
+    Add : Exp → Exp → Exp
+    Lam : Ty → Exp → Exp
+    App : Exp → Exp → Exp
+    Var : Nat → Exp
+
+  idN : Exp 
+  idN = Lam N (Var zero)
+  
+  constN : Exp 
+  constN = Lam N (Lam N (Var (suc zero)))
+  
+  fortytwo = App (App constN (C 42)) (C 5)
+  
+  loop = App (Lam N (App (Var 0) (Var 0))) (Lam N (App (Var 0) (Var 0)))
+
 module STLC where
   open Types
 
-    
-  -- Similar to Haskell's GADT syntax
-  --   Set is like Kind *
-  
   -- Exp:
   -- We want a datatype where
   --   1) are all additions are on numbers  
@@ -27,6 +42,8 @@ module STLC where
   --   3) are all used variables in scope
   
   -- let's tackle 1) and 2) first
+  
+  -- ! This is a lambda calculus without variables! (not very usefull)
   module Try1  where
     data Exp : Ty -> Set where
       C : Nat -> Exp N
@@ -46,6 +63,8 @@ module STLC where
     ex-add = Add (C 5) (C 6)
     -- ex-add-fail = Add (C 5) (Lam N N (C 5))
     
+
+  -- ! show abbreviations
   module Try1' where
     -- make signatures more concise 
     data Exp : Ty -> Set where
@@ -65,6 +84,7 @@ module STLC where
     ex3 = Lam N (Fun N N) (Lam N N (C 5))
     
     
+  -- show implicit arguments
   module Try1'' where
     -- make examples more concise with implicit arguments
     data Exp : Ty -> Set where
@@ -92,7 +112,7 @@ module STLC where
     -- interlude: interactive editing/how to write functions
     --    C-c C-l : (re)load file
     --    C-c C-c : case split (on variable written in goal)
-    --    C-c .   : show current goal
+
     --    C-c ,   : show current goal
     --              and the type what's written inside it
     --    C-r     : refine/solve
@@ -103,11 +123,16 @@ module STLC where
     size (App f e) = suc (size f + size e)
     
 
-    -- tag free evaluation
+    -- tag free evaluation: 
+    -- we have some programs... how about evaluating them
+
     eval' : {t : Ty} -> Exp t -> {! Value!} 
     -- We want to write this: no tags attached but what is the result
-    -- type of the function? when we look at the goal 0 we see that we
-    -- have something to rely on: t
+    -- type of the function?
+    -- 
+    -- when we look at the goal 0 we see that we have something to rely on: t
+    -- sow we define Value as a function of t
+
     eval' (C x) = {! x !}
     eval' (Add e1 e2) = {! eval' e1 + eval' e2 !}
     eval' (Lam t1 e) = {! λ x → eval' e!}
@@ -117,7 +142,8 @@ module STLC where
     Value N = Nat
     Value (Fun t1 t2) = Value t1 → Value t2
 
-    -- notice that the meta-variables differ in the goals
+    -- ! notice that the meta-variables differ in the goals !
+
     eval : {t : Ty} -> Exp t -> Value t 
     eval (C x) = x
     eval (Add e1 e2) = eval e1 + eval e2
@@ -130,6 +156,9 @@ module STLC where
     
   -- ok, but how do we deal with Var?
   module Try2 where
+  
+    -- In Exp we are doing something similar than in typeof (cf Haskell)
+    -- ... so it's a good guess we need a *context*
   
     Ctx = List Ty
     {-
@@ -148,6 +177,7 @@ module STLC where
       zero : {G : Ctx} {t : Ty} -> Bound zero ( t :: G)
       suc  : {n : Nat} {t : Ty} {G : Ctx} -> Bound n G -> Bound (suc n) (t :: G)
       
+    -- lookup function: pattern matching specialties
     lookupTy : {n : Nat} (G : Ctx) -> Bound n G -> Ty
     lookupTy nil ()
     lookupTy (t :: G) zero = t
@@ -172,12 +202,11 @@ module STLC where
     Value N = Nat
     Value (Fun t1 t2) = Value t1 → Value t2
     
-    -- how to evaluate those?
-    -- eval : {G : Ctx} {t : Ty} -> Exp G t -> {!!} -> Value t 
-    -- eval e r = {!!}
+    -- like in the tagged version, we need an environment:
     data Env : Ctx -> Set where
       nil  : Env nil
       _::_ : {t : Ty} {G : Ctx} -> Value t -> Env G -> Env (t :: G)
+    -- but now we can store untagged values, as we now the types from the Ctx
       
 
     eval : {G : Ctx} {t : Ty} -> Exp G t -> Env G -> Value t 
@@ -186,6 +215,7 @@ module STLC where
     eval (Lam t1 e) r = λ x → eval e (x :: r)
     eval (App f e) r = eval f r (eval e r)
     eval (Var x) r = lookupV x r
+    -- does somebody now what could go wrong?
       where lookupV : {G : Ctx} {n : Nat} ->
                       Bound n G -> Env G -> Value (lookupTy _ x)
             lookupV () nil
@@ -201,7 +231,6 @@ module STLC where
   module Try3 where
     Ctx = List Ty
 
-    -- ! constructors can be overloaded
     data Bound : Ty -> Ctx -> Set where
       zero : {G : Ctx} {t : Ty} -> Bound t ( t :: G)
       suc  : {t t' : Ty} {G : Ctx} -> Bound t G -> Bound t (t' :: G)
@@ -250,35 +279,19 @@ module STLC where
     
     test = {! eval fortytwo nil!}
 
+  open Try3 public
 
-module LC where
-  open Types
 
-  data Exp : Set where
-    Var : Nat → Exp
-    C : Nat → Exp
-    Add : Exp → Exp → Exp
-    Lam : Ty → Exp → Exp
-    App : Exp → Exp → Exp
-
-  idN : Exp 
-  idN = Lam N (Var zero)
-  
-  constN : Exp 
-  constN = Lam N (Lam N (Var (suc zero)))
-  
-  fortytwo = App (App constN (C 42)) (C 5)
-  
-  loop = App (Lam N (App (Var 0) (Var 0))) (Lam N (App (Var 0) (Var 0)))
     
 module Infer where
   open Types
-  open STLC.Try3 hiding (lookupTy)
+  open STLC hiding (lookupTy)
   open LC
 
 
   -- ! explain equality
   -- ! explain with and rewriting
+
   _==_ : (t1 t2 : Ty) → Maybe (t1 ≡ t2)
   N == N = just refl
   N == Fun _ _ = nothing
@@ -294,7 +307,8 @@ module Infer where
   ... | just (t , x) = just (t , suc x)
   ... | nothing = nothing
   
-  -- there is a typed STCL Expression; better (TODO) such that the erasure is equal to the untyped one
+    
+  
   typeof : (G : Ctx) → LC.Exp → Maybe (Sig Ty (\ t -> STLC.Try3.Exp G t))
   typeof G (Var x) with lookupTy x G
   ... | just (t , x') = just (t , Var x')
@@ -323,3 +337,72 @@ module Infer where
 
   test-eval-fortytwo : fmap eval' (typeof nil LC.fortytwo)  === just (N , 42)
   test-eval-fortytwo = refl
+
+  bound-to-nat : {G : Ctx} {t : Ty} -> Bound t G -> Nat
+  bound-to-nat zero = 0
+  bound-to-nat (suc x) = suc (bound-to-nat x)
+  
+
+  data Bound' : Nat -> Ty -> Ctx -> Set where
+      zero : {G : Ctx} {t : Ty} -> Bound' zero t ( t :: G)
+      suc  : {n : Nat} {t t' : Ty} {G : Ctx} -> Bound' n t G -> Bound' (suc n) t (t' :: G)
+      
+  toBound : {n : Nat} {t : Ty} {G : Ctx} -> Bound' n t G -> Bound t G
+  toBound zero = zero
+  toBound (suc x) = suc (toBound x)
+  
+  lem-bound : {n : Nat} {t : Ty} {G : Ctx} -> (x : Bound' n t G) -> n === bound-to-nat (toBound x)
+  lem-bound zero = refl
+  lem-bound (suc x) = cong suc (lem-bound x)
+
+  data Annotated {G : Ctx} : {t : Ty} -> LC.Exp -> STLC.Try3.Exp G t -> Set where
+    Var : {t : Ty} {n : Nat} (x : Bound' n t G) -> Annotated (Var n) (Var (toBound x))
+    C : {n : Nat} -> Annotated (C n) (C n)
+    Add : {e1 e2 : LC.Exp} {e1' e2' : STLC.Exp G N} ->
+          Annotated e1 e1' -> Annotated e2 e2' -> Annotated (Add e1 e2) (Add e1' e2')
+    Lam : (t1 : Ty) {t2 : Ty} {e : LC.Exp} {e' : STLC.Exp (t1 :: G) t2} ->
+          Annotated e e' -> Annotated (Lam t1 e) (Lam t1 e')
+    App : {t1 t2 : Ty} {f e : LC.Exp} {f' : STLC.Exp G (Fun t1 t2)} {e' : STLC.Exp G t1} ->
+          Annotated f f' -> Annotated e e' -> Annotated (App f e) (App f' e')
+          
+  strip : {t : Ty} {G : Ctx} (e : STLC.Exp G t) -> LC.Exp
+  strip (C x) = C x
+  strip (Add e1 e2) = Add (strip e1) (strip e2)
+  strip (Lam t1 e) = Lam t1 (strip e)
+  strip (App f e) = App (strip f) (strip e)
+  strip (Var x) = Var (bound-to-nat x)
+          
+  lem-annotated : {t : Ty} {G : Ctx} {e : LC.Exp} {e' : STLC.Exp G t} ->
+                  Annotated e e' -> e === strip e'
+  lem-annotated (Var x) = cong Var (lem-bound x)
+  lem-annotated C = refl
+  lem-annotated (Add e e') rewrite lem-annotated e | lem-annotated e' = refl
+  lem-annotated (Lam t1 e) rewrite lem-annotated e = refl
+  lem-annotated (App e e') rewrite lem-annotated e | lem-annotated e' = refl
+  
+  
+  lookupTy-precise : (n : Nat) -> (G : Ctx) -> Maybe (Sig Ty (\ t -> (Bound' n t G))) 
+  lookupTy-precise n nil = nothing
+  lookupTy-precise zero (t :: G) = just (t , zero)
+  lookupTy-precise (suc n) (_ :: G) with lookupTy-precise n G
+  ... | just (t , x) = just (t , suc x)
+  ... | nothing = nothing
+
+  -- there is a typed STCL Expression; better (TODO) such that the erasure is equal to the untyped one
+  typeof-precise : (G : Ctx) → (e : LC.Exp) → Maybe (Sig Ty (\ t -> Sig (STLC.Exp G t) ( \ e' -> Annotated e e')))
+  typeof-precise G (Var x) with lookupTy-precise x G
+  ... | just (t , x') = just (t , Var (toBound x') , Var x')
+  ... | nothing = nothing
+  typeof-precise G (C x) = just (N , C x , C)
+  typeof-precise G (Add e1 e2) with typeof-precise G e1 | typeof-precise G e2
+  ... | just (N , e1'' , e1') | just (N , e2'' , e2') = just (N , Add e1'' e2'' , Add e1' e2')
+  ... | _ | _ = nothing
+  typeof-precise G (Lam t1 e) with typeof-precise (t1 :: G) e
+  typeof-precise G (Lam t1 e) | just (t2 , e'' , e') = just (Fun t1 t2 , Lam t1 e'' , Lam t1 e')
+  typeof-precise G (Lam t1 e) | _ = nothing
+  typeof-precise G (App e1 e2) with typeof-precise G e1 | typeof-precise G e2
+  typeof-precise G (App e1 e2) | just (Fun t1 t2 , f)   | just (t1' , e) with t1 == t1'
+  typeof-precise G (App e1 e2) | just (Fun .t1' t2 , f' , f) | just (t1' , e' , e) | just refl = just (t2 , App f' e' , App f e)
+  typeof-precise G (App e1 e2) | just (Fun t1 t2 , f)   | just (t1' , e) | nothing = nothing
+  typeof-precise G (App e1 e2) | _ | _ = nothing
+    

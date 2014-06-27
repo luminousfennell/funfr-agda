@@ -2,7 +2,7 @@ module Prelude where
 
 open import Data.Nat public
 open import Data.Maybe public
-open import Relation.Binary.PropositionalEquality public using (_≡_ ; refl) 
+open import Relation.Binary.PropositionalEquality public using (_≡_ ; refl ; cong) 
 
 data List (A : Set) : Set where
   nil  : List A
@@ -11,6 +11,7 @@ infixr 5 _::_
 
 data Sig (A : Set) (f : A -> Set) : Set where
   _,_ : (a : A) -> f a -> Sig A f
+infixr 4 _,_
 
 Nat = ℕ
 _===_ = _≡_
