@@ -1,4 +1,4 @@
-module STCL where
+module STCLTagged where
 
 import Data.List
 import Control.Monad
@@ -16,7 +16,8 @@ data Exp = C Int
            
 fortytwo, constN, ex :: Exp
 fortytwo = Add (C 31) (C 11)
-constN = Lam N (Lam N (Var 1))
+constN = Lam N (Lam N (Var 1)) -- \ x y z -> x
+idN = Lam N (Var 0)
          
 ex = App (App constN fortytwo) (C 5) 
           
@@ -27,6 +28,7 @@ data Value = VNum Int | VClos (Value -> Value)
 instance Show Value where
   show (VNum x) = "VNum " ++ show x
   show (VClos _) = "VClos"
+
 type Env = [Value]
 
 eval :: Exp -> Env -> Value
@@ -36,6 +38,7 @@ eval (Add e1 e2) r | (VNum x1, VNum x2) <- (eval e1 r, eval e2 r)
                    | otherwise
                      = error "ill-typed addition"
 eval (Lam t e)   r = VClos (\x -> eval e (x:r))
+                     --                ^ Lam N (Lam N ...)
 eval (App f e)   r | (VClos vf, v) <- (eval f r, eval e r) 
                      = vf v
                    | otherwise
