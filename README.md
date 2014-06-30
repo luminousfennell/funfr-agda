@@ -3,7 +3,7 @@
 This is the code for a short tutorial on how to write a tag-less STLC
 interpreter in the dependently typed functional programming language
 [Agda](http://wiki.portal.chalmers.se/agda/pmwiki.php?n=Main.HomePage).
-It was presented at the FunFR functional programming meetup on
+It was presented at the [FunFR functional programming meetup](http://www.meetup.com/Freiburg-Functional-Programming-Meetup/events/190956772/) on
 2014-06-28. An alternative tutorial with similar scope can be found
 [here](http://gergo.erdi.hu/blog/2013-05-01-simply_typed_lambda_calculus_in_agda,_without_shortcuts/).
 
@@ -29,7 +29,7 @@ with questions, or send pull-requests :)
   meeting and might be hard to understand with the current (lack of)
   documentation.
   - `Typeof` : unverified implementation.
-  - `Typeof-Precise1` : verified implementation.
+  - `Typeof-Precise` : verified implementation.
 
 - `STLC-tagged.hs`: a "tag-full" version written in Haskell, for
   comparison.
